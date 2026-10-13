@@ -1,0 +1,28 @@
+{
+  "name": "spatial-twin-web-admin",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@11.14.0",
+  "engines": {
+    "node": ">=22.12.0"
+  },
+  "scripts": {
+    "dev": "vite",
+    "type-check": "vue-tsc --noEmit -p tsconfig.app.json",
+    "build": "pnpm run type-check && vite build"
+  },
+  "dependencies": {
+    "@lucide/vue": "1.56.0",
+    "element-plus": "2.14.7",
+    "pinia": "4.0.3",
+    "vue": "3.5.44",
+    "vue-router": "5.4.0"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-vue": "6.0.10",
+    "typescript": "6.0.3",
+    "vite": "8.3.4",
+    "vue-tsc": "3.3.13"
+  }
+}

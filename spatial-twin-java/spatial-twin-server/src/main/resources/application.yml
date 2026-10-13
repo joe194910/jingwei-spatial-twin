@@ -1,0 +1,75 @@
+# 经纬空间 Spring Boot 公共配置。
+# 这里只放各环境共用的配置；开发和生产环境的连接信息分别维护在 application-dev.yml 与 application-prod.yml。
+
+# Web 服务配置：端口可通过 JW_SERVER_PORT 环境变量覆盖。
+server:
+  port: ${JW_SERVER_PORT:8080}
+
+# Spring Boot 基础配置。
+spring:
+  # 应用标识，用于日志、监控以及后续服务治理场景。
+  application:
+    name: jingwei-spatial-twin
+  # 默认启用开发环境；可通过 --config-active=prod 或 CONFIG_ACTIVE=prod 切换生产环境。
+  profiles:
+    active: ${config-active:dev}
+  # Flyway 数据库版本管理：启动时按版本执行根目录 db/migration 中的迁移脚本。
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+    baseline-on-migrate: false
+    validate-migration-naming: true
+  # JSON 序列化配置：后端统一使用 UTC，空值字段不返回给前端。
+  jackson:
+    time-zone: UTC
+    default-property-inclusion: non_null
+
+# MyBatis-Plus 数据访问配置。
+mybatis-plus:
+  # 将数据库下划线字段自动映射为 Java 驼峰属性。
+  configuration:
+    map-underscore-to-camel-case: true
+  # 全局逻辑删除规则：deleted=1 表示已删除，deleted=0 表示有效。
+  global-config:
+    db-config:
+      logic-delete-field: deleted
+      logic-delete-value: 1
+      logic-not-delete-value: 0
+
+# Sa-Token 登录会话配置：会话存入 Redis，Redis 不可用时不得降级为无鉴权模式。
+sa-token:
+  # 前后端传递登录凭证时使用的请求头名称。
+  token-name: jw-token
+  # Token 总有效期，单位为秒，默认 2 小时。
+  timeout: 7200
+  # 连续无操作有效期，单位为秒，默认 30 分钟。
+  active-timeout: 1800
+  # 允许同一账号在多个设备同时登录，但每次登录生成独立 Token。
+  is-concurrent: true
+  is-share: false
+  # 使用随机 64 位 Token，避免凭证具有可推测性。
+  token-style: random-64
+  # 默认关闭 Sa-Token 框架详细日志，业务审计由平台审计模块负责。
+  is-log: false
+
+# 经纬空间平台自定义配置。
+jingwei:
+  # 接口安全配置：只允许白名单中的前端来源跨域访问。
+  security:
+    cors-allowed-origins: ${JW_CORS_ALLOWED_ORIGINS:http://localhost:5173}
+  # 首个管理员初始化：仅在显式开启时执行，密码必须由环境变量注入且不得写入 YAML。
+  bootstrap-admin:
+    enabled: ${JW_BOOTSTRAP_ADMIN_ENABLED:false}
+    username: ${JW_BOOTSTRAP_ADMIN_USERNAME:admin}
+    password: ${JW_BOOTSTRAP_ADMIN_PASSWORD:}
+  # MinIO 对象存储：各环境分别配置连接信息，启用后在启动阶段校验连接和目标桶。
+  storage:
+    minio:
+      enabled: ${JW_MINIO_ENABLED:false}
+      endpoint: ${JW_MINIO_ENDPOINT:http://127.0.0.1:9000}
+      bucket: ${JW_MINIO_BUCKET:spatial-twin}
+      # 公共配置不保存凭证；开发环境使用 application-dev.yml，生产环境由部署环境注入。
+      access-key: ${JW_MINIO_ACCESS_KEY:}
+      secret-key: ${JW_MINIO_SECRET_KEY:}
+      # 生产环境建议预先创建私有桶；本地开发可显式开启自动创建。
+      create-bucket-if-absent: ${JW_MINIO_CREATE_BUCKET_IF_ABSENT:false}

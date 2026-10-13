@@ -1,0 +1,51 @@
+# 前端依赖、缓存、测试覆盖率与构建产物
+**/node_modules/
+**/dist/
+**/.vite/
+**/.pnpm-store/
+**/coverage/
+*.tsbuildinfo
+npm-debug.log*
+pnpm-debug.log*
+
+# Java 构建产物与 JVM 崩溃文件
+**/target/
+**/.m2-repository/
+*.class
+hs_err_pid*
+replay_pid*
+
+# 本地环境变量与私有配置
+.env
+.env.*
+!.env.example
+**/application-local.yml
+**/application-*.local.yml
+**/application-secrets.yml
+*.local
+*.pem
+*.key
+*.p12
+*.jks
+
+# 本地运行数据、日志与私有业务资产
+.runtime/
+.cache/
+logs/
+*.log
+*.pid
+storage/
+uploads/
+assets/original/
+assets/published/
+
+# 编辑器、系统文件与工具运行记录
+.idea/
+.vscode/
+.github/modernize/
+.DS_Store
+Thumbs.db
+Desktop.ini
+*.swp
+*.swo
+*~

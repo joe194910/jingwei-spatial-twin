@@ -1,0 +1,39 @@
+# 本地开发配置：默认直接使用当前项目约定的本机基础设施连接参数。
+
+# Spring Boot 开发环境基础设施配置。
+spring:
+  # MySQL 8.0 开发数据源：连接本机 jingwei_spatial 数据库。
+  datasource:
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    url: ${JW_DB_URL:jdbc:mysql://127.0.0.1:3306/jingwei_spatial?useUnicode=true&characterEncoding=utf8&serverTimezone=UTC}
+    username: ${JW_DB_USER:root}
+    password: ${JW_DB_PASSWORD:abc123456}
+  # Redis 开发连接：用于 Sa-Token 会话、权限缓存及后续业务缓存。
+  data:
+    redis:
+      host: ${JW_REDIS_HOST:127.0.0.1}
+      port: ${JW_REDIS_PORT:6379}
+      password: ${JW_REDIS_PASSWORD:123456}
+      database: ${JW_REDIS_DATABASE:5}
+      timeout: 3s
+  # 开发环境同样禁止 Flyway clean，避免误删本地业务数据。
+  flyway:
+    clean-disabled: true
+
+# 经纬空间开发环境自定义配置。
+jingwei:
+  # MinIO 对象存储：保存模型、图纸、专业资料及发布资产。
+  storage:
+    minio:
+      enabled: ${JW_MINIO_ENABLED:false}
+      endpoint: ${JW_MINIO_ENDPOINT:http://127.0.0.1:9000}
+      bucket: ${JW_MINIO_BUCKET:spatial-twin}
+      access-key: ${JW_MINIO_ACCESS_KEY:nexora_admin}
+      secret-key: ${JW_MINIO_SECRET_KEY:NexoraMinio2026}
+      # 开发环境目标桶不存在时自动创建。
+      create-bucket-if-absent: ${JW_MINIO_CREATE_BUCKET_IF_ABSENT:false}
+
+# 开发日志配置：保留平台业务 INFO 日志，便于本地联调排查。
+logging:
+  level:
+    com.jingwei.spatial: INFO
