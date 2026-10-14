@@ -15,7 +15,8 @@ export default defineConfig({
     proxy: {
       '/api': {
         target: 'http://127.0.0.1:8080',
-        changeOrigin: true,
+        // 保留前端访问域名，后端将代理请求按同源请求处理，无需维护开发端口白名单。
+        changeOrigin: false,
       },
     },
   },

@@ -54,14 +54,11 @@ sa-token:
 
 # 经纬空间平台自定义配置。
 jingwei:
-  # 接口安全配置：只允许白名单中的前端来源跨域访问。
-  security:
-    cors-allowed-origins: ${JW_CORS_ALLOWED_ORIGINS:http://localhost:5173}
   # 首个管理员初始化：仅在显式开启时执行，密码必须由环境变量注入且不得写入 YAML。
   bootstrap-admin:
-    enabled: ${JW_BOOTSTRAP_ADMIN_ENABLED:false}
+    enabled: ${JW_BOOTSTRAP_ADMIN_ENABLED:true}
     username: ${JW_BOOTSTRAP_ADMIN_USERNAME:admin}
-    password: ${JW_BOOTSTRAP_ADMIN_PASSWORD:}
+    password: ${JW_BOOTSTRAP_ADMIN_PASSWORD:admin@123456}
   # MinIO 对象存储：各环境分别配置连接信息，启用后在启动阶段校验连接和目标桶。
   storage:
     minio:

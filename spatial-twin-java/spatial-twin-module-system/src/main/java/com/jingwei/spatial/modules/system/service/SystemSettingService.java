@@ -134,7 +134,7 @@ public class SystemSettingService {
     }
 
     private SettingVO toVO(SettingEntity entity) {
-        boolean sensitive = Integer.valueOf(1).equals(entity.getSensitive());
+        boolean sensitive = Integer.valueOf(1).equals(entity.getSensitiveFlag());
         return new SettingVO(
                 entity.getSettingKey(),
                 sensitive ? "******" : entity.getSettingValue(),

@@ -18,8 +18,10 @@ import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * 后台菜单树管理服务。
@@ -30,15 +32,18 @@ public class SystemMenuService {
     private final MenuMapper menuMapper;
     private final PermissionMapper permissionMapper;
     private final SystemAuditService auditService;
+    private final AccessMetadataService accessMetadataService;
 
     public SystemMenuService(
             MenuMapper menuMapper,
             PermissionMapper permissionMapper,
-            SystemAuditService auditService
+            SystemAuditService auditService,
+            AccessMetadataService accessMetadataService
     ) {
         this.menuMapper = menuMapper;
         this.permissionMapper = permissionMapper;
         this.auditService = auditService;
+        this.accessMetadataService = accessMetadataService;
     }
 
     /**
@@ -49,11 +54,22 @@ public class SystemMenuService {
     public List<MenuVO> listTree() {
         List<MenuEntity> menus = menuMapper.selectList(Wrappers.<MenuEntity>lambdaQuery()
                 .orderByAsc(MenuEntity::getSortOrder, MenuEntity::getId));
-        Map<Long, List<MenuEntity>> childrenByParent = new LinkedHashMap<>();
-        for (MenuEntity menu : menus) {
-            childrenByParent.computeIfAbsent(normalizeParentId(menu.getParentId()), key -> new ArrayList<>()).add(menu);
-        }
-        return buildTree(0L, childrenByParent);
+        return buildTree(0L, groupByParent(menus));
+    }
+
+    /**
+     * 查询当前登录用户可在导航中看到的菜单树。
+     *
+     * @return 已按可见状态和当前用户权限过滤的菜单树
+     */
+    public List<MenuVO> listCurrentUserTree() {
+        long userId = currentUserId();
+        boolean superAdmin = accessMetadataService.getRoleCodes(userId).contains("SUPER_ADMIN");
+        Set<String> permissionCodes = new HashSet<>(accessMetadataService.getPermissionCodes(userId));
+        List<MenuEntity> visibleMenus = menuMapper.selectList(Wrappers.<MenuEntity>lambdaQuery()
+                .eq(MenuEntity::getVisible, 1)
+                .orderByAsc(MenuEntity::getSortOrder, MenuEntity::getId));
+        return buildAuthorizedTree(0L, groupByParent(visibleMenus), superAdmin, permissionCodes);
     }
 
     /**
@@ -192,19 +208,63 @@ public class SystemMenuService {
     private List<MenuVO> buildTree(long parentId, Map<Long, List<MenuEntity>> childrenByParent) {
         return childrenByParent.getOrDefault(parentId, List.of()).stream()
                 .sorted(Comparator.comparing(MenuEntity::getSortOrder).thenComparing(MenuEntity::getId))
-                .map(menu -> new MenuVO(
-                        menu.getId(),
-                        normalizeParentId(menu.getParentId()),
-                        menu.getName(),
-                        menu.getPath(),
-                        menu.getComponent(),
-                        menu.getIcon(),
-                        menu.getSortOrder(),
-                        menu.getPermissionCode(),
-                        menu.getVisible(),
-                        buildTree(menu.getId(), childrenByParent)
-                ))
+                .map(menu -> toMenuVO(menu, buildTree(menu.getId(), childrenByParent)))
                 .toList();
+    }
+
+    private List<MenuVO> buildAuthorizedTree(
+            long parentId,
+            Map<Long, List<MenuEntity>> childrenByParent,
+            boolean superAdmin,
+            Set<String> permissionCodes
+    ) {
+        return childrenByParent.getOrDefault(parentId, List.of()).stream()
+                .sorted(Comparator.comparing(MenuEntity::getSortOrder).thenComparing(MenuEntity::getId))
+                .map(menu -> {
+                    List<MenuEntity> childEntities = childrenByParent.getOrDefault(menu.getId(), List.of());
+                    List<MenuVO> children = buildAuthorizedTree(
+                            menu.getId(),
+                            childrenByParent,
+                            superAdmin,
+                            permissionCodes
+                    );
+                    if (!canAccess(menu, superAdmin, permissionCodes)
+                            || (!childEntities.isEmpty() && children.isEmpty())) {
+                        return null;
+                    }
+                    return toMenuVO(menu, children);
+                })
+                .filter(menu -> menu != null)
+                .toList();
+    }
+
+    private Map<Long, List<MenuEntity>> groupByParent(List<MenuEntity> menus) {
+        Map<Long, List<MenuEntity>> childrenByParent = new LinkedHashMap<>();
+        for (MenuEntity menu : menus) {
+            childrenByParent.computeIfAbsent(normalizeParentId(menu.getParentId()), key -> new ArrayList<>()).add(menu);
+        }
+        return childrenByParent;
+    }
+
+    private boolean canAccess(MenuEntity menu, boolean superAdmin, Set<String> permissionCodes) {
+        return menu.getPermissionCode() == null
+                || superAdmin
+                || permissionCodes.contains(menu.getPermissionCode());
+    }
+
+    private MenuVO toMenuVO(MenuEntity menu, List<MenuVO> children) {
+        return new MenuVO(
+                menu.getId(),
+                normalizeParentId(menu.getParentId()),
+                menu.getName(),
+                menu.getPath(),
+                menu.getComponent(),
+                menu.getIcon(),
+                menu.getSortOrder(),
+                menu.getPermissionCode(),
+                menu.getVisible(),
+                children
+        );
     }
 
     private long currentUserId() {

@@ -49,3 +49,5 @@ Desktop.ini
 *.swp
 *.swo
 *~
+
+/spatial-twin-java/spatial-twin-server/src/test/

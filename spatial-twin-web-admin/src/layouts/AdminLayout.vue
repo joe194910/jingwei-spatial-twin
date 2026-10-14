@@ -6,6 +6,7 @@ import {
   Boxes,
   Building2,
   ClipboardList,
+  Circle,
   Cuboid,
   FileClock,
   FolderKanban,
@@ -15,6 +16,7 @@ import {
   LogOut,
   Map,
   Menu,
+  Settings,
   ShieldCheck,
   SlidersHorizontal,
   Users,
@@ -22,15 +24,17 @@ import {
 import { ElMessage } from 'element-plus'
 
 import { useAuthStore } from '@/stores/auth'
+import type { MenuItem } from '@/types/system'
 
 interface NavigationItem {
+  id: number
   label: string
   path: string
-  moduleKey: string
   icon: Component
 }
 
 interface NavigationGroup {
+  id: number
   label: string
   items: NavigationItem[]
 }
@@ -41,50 +45,51 @@ const authStore = useAuthStore()
 const mobileMenuVisible = ref(false)
 const loggingOut = ref(false)
 
-const navigationGroups: NavigationGroup[] = [
-  {
-    label: '概览与空间',
-    items: [
-      { label: '工作台总览', path: '/', moduleKey: 'dashboard', icon: LayoutDashboard },
-      { label: '园区项目', path: '/projects', moduleKey: 'projects', icon: FolderKanban },
-      { label: '地图标注编辑器', path: '/map', moduleKey: 'map', icon: Map },
-      { label: '楼宇精细编辑', path: '/building', moduleKey: 'building', icon: Building2 },
-      { label: '楼层与区域管理', path: '/floor', moduleKey: 'floor', icon: Layers3 },
-    ],
-  },
-  {
-    label: '资产与交付',
-    items: [
-      { label: '资源资产中心', path: '/assets', moduleKey: 'assets', icon: Boxes },
-      { label: '草稿与场景发布', path: '/release', moduleKey: 'release', icon: FileClock },
-    ],
-  },
-  {
-    label: '管理后台',
-    items: [
-      { label: '用户管理', path: '/system/users', moduleKey: 'users', icon: Users },
-      { label: '角色管理', path: '/system/roles', moduleKey: 'roles', icon: ShieldCheck },
-      { label: '菜单管理', path: '/system/menus', moduleKey: 'menus', icon: Menu },
-      { label: '系统配置', path: '/system/settings', moduleKey: 'system-settings', icon: SlidersHorizontal },
-      { label: '安全审计日志', path: '/audit', moduleKey: 'audit', icon: ShieldCheck },
-      { label: '性能监控', path: '/performance', moduleKey: 'performance', icon: Gauge },
-    ],
-  },
-]
-
-const activeModule = computed(() => String(route.meta.moduleKey ?? ''))
 const pageTitle = computed(() => String(route.meta.title ?? '管理平台'))
-const visibleNavigationGroups = computed(() =>
-  navigationGroups
+const iconRegistry: Record<string, Component> = {
+  Activity,
+  Boxes,
+  Building2,
+  Circle,
+  FileClock,
+  FolderKanban,
+  Gauge,
+  Layers3,
+  LayoutDashboard,
+  Map,
+  Menu,
+  Settings,
+  ShieldCheck,
+  SlidersHorizontal,
+  Users,
+}
+
+function resolveIcon(iconName: string | null) {
+  if (!iconName) return Circle
+  return iconRegistry[iconName] ?? Circle
+}
+
+function flattenNavigationItems(menus: MenuItem[]): NavigationItem[] {
+  return menus.flatMap((menu) => {
+    const currentItem = menu.path.startsWith('/') && menu.component !== 'Layout'
+      ? [{
+          id: menu.id,
+          label: menu.name,
+          path: menu.path,
+          icon: resolveIcon(menu.icon),
+        }]
+      : []
+    return [...currentItem, ...flattenNavigationItems(menu.children)]
+  })
+}
+
+// 根菜单名称作为侧栏分组标题，全部导航内容以后台菜单树为唯一数据源。
+const visibleNavigationGroups = computed<NavigationGroup[]>(() =>
+  authStore.menus
     .map((group) => ({
-      ...group,
-      items: group.items.filter((item) => {
-        if (item.moduleKey === 'system-settings') return authStore.isSuperAdmin
-        if (item.moduleKey === 'users') return authStore.hasPermission('system:user:list')
-        if (item.moduleKey === 'roles') return authStore.hasPermission('system:role:list')
-        if (item.moduleKey === 'menus') return authStore.hasPermission('system:menu:list')
-        return true
-      }),
+      id: group.id,
+      label: group.name,
+      items: flattenNavigationItems(group.children.length > 0 ? group.children : [group]),
     }))
     .filter((group) => group.items.length > 0),
 )
@@ -122,13 +127,13 @@ async function logout() {
       </div>
 
       <nav class="navigation" aria-label="主导航">
-        <section v-for="group in visibleNavigationGroups" :key="group.label" class="nav-group">
+        <section v-for="group in visibleNavigationGroups" :key="group.id" class="nav-group">
           <div class="nav-group-label">{{ group.label }}</div>
           <button
             v-for="item in group.items"
-            :key="item.moduleKey"
+            :key="item.id"
             class="nav-item"
-            :class="{ active: activeModule === item.moduleKey }"
+            :class="{ active: route.path === item.path }"
             type="button"
             @click="navigate(item.path)"
           >
@@ -159,13 +164,13 @@ async function logout() {
         </div>
       </div>
       <nav class="navigation" aria-label="移动端主导航">
-        <section v-for="group in visibleNavigationGroups" :key="group.label" class="nav-group">
+        <section v-for="group in visibleNavigationGroups" :key="group.id" class="nav-group">
           <div class="nav-group-label">{{ group.label }}</div>
           <button
             v-for="item in group.items"
-            :key="item.moduleKey"
+            :key="item.id"
             class="nav-item"
-            :class="{ active: activeModule === item.moduleKey }"
+            :class="{ active: route.path === item.path }"
             type="button"
             @click="navigate(item.path)"
           >

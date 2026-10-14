@@ -21,7 +21,7 @@ public class SettingEntity {
     private String valueType;
     private String description;
     @TableField("sensitive_flag")
-    private Integer sensitive;
+    private Integer sensitiveFlag;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
     private Long createdBy;
@@ -69,12 +69,12 @@ public class SettingEntity {
         this.description = description;
     }
 
-    public Integer getSensitive() {
-        return sensitive;
+    public Integer getSensitiveFlag() {
+        return sensitiveFlag;
     }
 
-    public void setSensitive(Integer sensitive) {
-        this.sensitive = sensitive;
+    public void setSensitiveFlag(Integer sensitiveFlag) {
+        this.sensitiveFlag = sensitiveFlag;
     }
 
     public LocalDateTime getCreatedAt() {

@@ -165,7 +165,7 @@ async function submitMenu() {
       ElMessage.success('菜单修改成功')
     }
     dialogVisible.value = false
-    await loadData()
+    await Promise.all([loadData(), authStore.refreshMenus()])
   } catch (error) {
     ElMessage.error(errorMessage(error, '菜单保存失败'))
   } finally {
@@ -186,7 +186,7 @@ async function removeMenu(menu: MenuItem) {
     )
     await deleteMenu(menu.id)
     ElMessage.success('菜单删除成功')
-    await loadData()
+    await Promise.all([loadData(), authStore.refreshMenus()])
   } catch (error) {
     if (error === 'cancel' || error === 'close') return
     ElMessage.error(errorMessage(error, '菜单删除失败'))

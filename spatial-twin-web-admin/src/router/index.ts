@@ -24,43 +24,71 @@ const routes: RouteRecordRaw[] = [
         path: '',
         name: 'dashboard',
         component: DashboardView,
-        meta: { title: '工作台总览', moduleKey: 'dashboard' },
+        meta: {
+          title: '工作台总览',
+          moduleKey: 'dashboard',
+          permission: 'workspace:dashboard:view',
+        },
       },
       {
         path: 'projects',
         name: 'projects',
         component: ModuleView,
-        meta: { title: '园区项目', moduleKey: 'projects' },
+        meta: {
+          title: '园区项目',
+          moduleKey: 'projects',
+          permission: 'project:project:list',
+        },
       },
       {
         path: 'map',
         name: 'map',
         component: SpatialWorkspaceView,
-        meta: { title: '地图标注编辑器', moduleKey: 'map' },
+        meta: {
+          title: '地图标注编辑器',
+          moduleKey: 'map',
+          permission: 'map:annotation:list',
+        },
       },
       {
         path: 'building',
         name: 'building',
         component: ModuleView,
-        meta: { title: '楼宇精细编辑', moduleKey: 'building' },
+        meta: {
+          title: '楼宇精细编辑',
+          moduleKey: 'building',
+          permission: 'building:model:list',
+        },
       },
       {
         path: 'floor',
         name: 'floor',
         component: ModuleView,
-        meta: { title: '楼层与区域管理', moduleKey: 'floor' },
+        meta: {
+          title: '楼层与区域管理',
+          moduleKey: 'floor',
+          permission: 'floor:space:list',
+        },
       },
       {
         path: 'assets',
         name: 'assets',
         component: ModuleView,
-        meta: { title: '资源资产中心', moduleKey: 'assets' },
+        meta: {
+          title: '资源资产中心',
+          moduleKey: 'assets',
+          permission: 'asset:resource:list',
+        },
       },
       {
         path: 'release',
         name: 'release',
         component: ModuleView,
-        meta: { title: '草稿与场景发布', moduleKey: 'release' },
+        meta: {
+          title: '草稿与场景发布',
+          moduleKey: 'release',
+          permission: 'release:scene:list',
+        },
       },
       {
         path: 'system/users',
