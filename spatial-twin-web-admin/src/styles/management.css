@@ -1,5 +1,6 @@
 .management-page {
   display: grid;
+  min-width: 0;
   gap: 16px;
 }
 
@@ -52,10 +53,15 @@
 
 .management-table,
 .setting-list {
+  min-width: 0;
   overflow: hidden;
   border: 1px solid var(--jw-border);
   border-radius: var(--jw-radius);
   background: var(--jw-surface);
+}
+
+.management-table {
+  width: 100%;
 }
 
 .tag-list {

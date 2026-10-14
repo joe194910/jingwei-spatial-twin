@@ -271,6 +271,11 @@ async function logout() {
   flex: 1;
   overflow-y: auto;
   padding: 12px 10px 20px;
+  scrollbar-width: none;
+}
+
+.navigation::-webkit-scrollbar {
+  display: none;
 }
 
 .nav-group + .nav-group {
@@ -327,6 +332,8 @@ async function logout() {
 }
 
 .page-shell {
+  width: calc(100% - 252px);
+  min-width: 0;
   min-height: 100vh;
   margin-left: 252px;
 }
@@ -384,6 +391,9 @@ async function logout() {
 }
 
 .page-content {
+  min-width: 0;
+  max-width: 100%;
+  overflow-x: hidden;
   padding: 24px 28px 36px;
 }
 
@@ -401,6 +411,7 @@ async function logout() {
   }
 
   .page-shell {
+    width: 100%;
     margin-left: 0;
   }
 

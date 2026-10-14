@@ -1,358 +1,695 @@
 <script setup lang="ts">
+import { computed, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
-import { ArrowRight, Building2, CircleAlert, Cuboid, FolderKanban, MapPinned } from '@lucide/vue'
-import { ElMessage } from 'element-plus'
+import {
+  Archive,
+  Building2,
+  ChevronRight,
+  Crosshair,
+  FolderKanban,
+  LocateFixed,
+  Map,
+  MapPin,
+  Plus,
+  RefreshCw,
+  Search,
+} from '@lucide/vue'
 
+import { listProjects } from '@/api/project'
+import JingweiOverviewMap from '@/components/map/JingweiOverviewMap.vue'
+import type { OverviewProjectMarker } from '@/map/types'
+import { ApiError } from '@/types/api'
+import type { ProjectItem } from '@/types/project'
+
+interface OverviewMapExpose {
+  fitProjects: () => void
+  focusProject: (projectId: string) => void
+}
+
+// 首页只消费用户有权访问的项目轻量信息，具体地图渲染由适配器负责。
 const router = useRouter()
+const loading = ref(false)
+const loadError = ref('')
+const keyword = ref('')
+const projects = ref<ProjectItem[]>([])
+const selectedProjectId = ref<string | null>(null)
+const overviewMap = ref<OverviewMapExpose>()
 
-const metrics = [
-  { label: '已创建项目', value: '02', detail: '个人工作区', icon: FolderKanban, tone: 'teal' },
-  { label: '已标注楼宇', value: '13', detail: '其中精细楼宇 3', icon: Building2, tone: 'blue' },
-  { label: '模型资产', value: '31', detail: '标准与精细分离', icon: Cuboid, tone: 'amber' },
-  { label: '待处理事项', value: '02', detail: '需要校准', icon: CircleAlert, tone: 'red' },
-]
+const filteredProjects = computed(() => {
+  const normalizedKeyword = keyword.value.trim().toLocaleLowerCase('zh-CN')
+  if (!normalizedKeyword) {
+    return projects.value
+  }
+  return projects.value.filter((project) =>
+    [project.name, project.projectCode, project.locationName].some((value) =>
+      value.toLocaleLowerCase('zh-CN').includes(normalizedKeyword),
+    ),
+  )
+})
 
-const tasks = [
-  { name: '办公楼 A 栋高清模型', state: '已处理', type: 'success' as const },
-  { name: '6 楼消防图纸校准', state: '待确认', type: 'warning' as const },
-  { name: '项目权限策略', state: '待接入', type: 'info' as const },
-]
+const projectMarkers = computed<OverviewProjectMarker[]>(() =>
+  filteredProjects.value.map((project) => ({
+    id: project.id,
+    name: project.name,
+    locationName: project.locationName,
+    status: project.status,
+    coordinate: {
+      lng: Number(project.startup.centerLng),
+      lat: Number(project.startup.centerLat),
+    },
+  })),
+)
 
-const projects = [
-  { name: '示范科技园区', buildings: 5, detail: 1, status: '草稿', updatedAt: '本地演示' },
-  { name: '智慧住宅样板', buildings: 8, detail: 2, status: '已发布', updatedAt: '本地演示' },
-]
+const selectedProject = computed(
+  () => projects.value.find((project) => project.id === selectedProjectId.value) ?? null,
+)
 
-function openMap() {
-  void router.push('/map')
+const activeProjectCount = computed(
+  () => projects.value.filter((project) => project.status === 'ACTIVE').length,
+)
+
+const archivedProjectCount = computed(
+  () => projects.value.filter((project) => project.status === 'ARCHIVED').length,
+)
+
+watch(filteredProjects, (visibleProjects) => {
+  const selectedProjectVisible = visibleProjects.some(
+    (project) => project.id === selectedProjectId.value,
+  )
+  if (!selectedProjectVisible) {
+    selectedProjectId.value = visibleProjects[0]?.id ?? null
+  }
+})
+
+function errorMessage(error: unknown, fallback: string) {
+  return error instanceof ApiError ? error.message : fallback
 }
 
-function showPendingMessage() {
-  ElMessage.info('后端任务中心将在 M1 之后接入。')
+function formatUtcTime(value: string) {
+  const normalized = /Z$|[+-]\d{2}:\d{2}$/.test(value) ? value : `${value}Z`
+  const date = new Date(normalized)
+  return Number.isNaN(date.getTime())
+    ? value
+    : date.toLocaleString('zh-CN', { hour12: false })
 }
+
+function formatCoordinate(value: number) {
+  return Number(value).toFixed(6)
+}
+
+async function loadProjects() {
+  loading.value = true
+  loadError.value = ''
+  try {
+    const result = await listProjects({
+      pageNo: 1,
+      pageSize: 100,
+    })
+    projects.value = result.records
+    const selectedStillExists = projects.value.some(
+      (project) => project.id === selectedProjectId.value,
+    )
+    if (!selectedStillExists) {
+      selectedProjectId.value =
+        projects.value.find((project) => project.status === 'ACTIVE')?.id ??
+        projects.value[0]?.id ??
+        null
+    }
+  } catch (error) {
+    loadError.value = errorMessage(error, '空间总览加载失败')
+  } finally {
+    loading.value = false
+  }
+}
+
+function selectProject(projectId: string) {
+  selectedProjectId.value = projectId
+  overviewMap.value?.focusProject(projectId)
+}
+
+function resetViewport() {
+  overviewMap.value?.fitProjects()
+}
+
+function openProject(project: ProjectItem) {
+  void router.push({
+    path: '/map',
+    query: { projectId: project.id },
+  })
+}
+
+function openProjectManagement() {
+  void router.push('/projects')
+}
+
+onMounted(loadProjects)
 </script>
 
 <template>
-  <div class="dashboard">
-    <section class="page-heading">
-      <div>
-        <span class="eyebrow">空间运营概览</span>
-        <h2>欢迎回来，空间管理员</h2>
-        <p>从园区标注开始，逐步建立可编辑、可发布的数字空间。</p>
+  <section class="spatial-overview" aria-label="经纬空间总览">
+    <JingweiOverviewMap
+      ref="overviewMap"
+      :projects="projectMarkers"
+      :selected-project-id="selectedProjectId"
+      @select="selectProject"
+    />
+
+    <header class="overview-command">
+      <div class="overview-title">
+        <span class="overview-symbol"><Map :size="18" /></span>
+        <div>
+          <strong>经纬空间总览</strong>
+          <small>所有园区与楼宇的统一空间入口</small>
+        </div>
       </div>
-      <el-button type="primary" size="large" @click="openMap">
-        <MapPinned :size="18" />
-        进入园区地图
-      </el-button>
-    </section>
-
-    <section class="metric-grid" aria-label="业务指标">
-      <article v-for="metric in metrics" :key="metric.label" class="metric-card">
-        <div class="metric-copy">
-          <span>{{ metric.label }}</span>
-          <strong>{{ metric.value }}</strong>
-          <small>{{ metric.detail }}</small>
-        </div>
-        <div class="metric-icon" :class="metric.tone">
-          <component :is="metric.icon" :size="22" />
-        </div>
-      </article>
-    </section>
-
-    <section class="overview-grid">
-      <article class="campus-panel">
-        <div class="section-heading">
-          <div>
-            <span class="eyebrow">当前项目</span>
-            <h3>示范科技园区</h3>
-          </div>
-          <el-button text @click="openMap">
-            打开项目
-            <ArrowRight :size="16" />
+      <div class="overview-command-actions">
+        <span class="provider-state">
+          <span class="provider-dot" />
+          经纬模拟底座
+        </span>
+        <el-tooltip content="重置项目视野" placement="bottom">
+          <el-button circle aria-label="重置项目视野" @click="resetViewport">
+            <LocateFixed :size="17" />
           </el-button>
+        </el-tooltip>
+        <el-tooltip content="刷新项目" placement="bottom">
+          <el-button circle :loading="loading" aria-label="刷新项目" @click="loadProjects">
+            <RefreshCw v-if="!loading" :size="17" />
+          </el-button>
+        </el-tooltip>
+      </div>
+    </header>
+
+    <aside class="project-browser">
+      <div class="browser-heading">
+        <div>
+          <span>空间项目</span>
+          <strong>{{ projects.length }}</strong>
         </div>
-        <button class="campus-visual" type="button" aria-label="打开示范科技园区" @click="openMap">
-          <img src="/assets/demo-campus.png" alt="示范科技园区鸟瞰效果图" />
-          <span class="visual-overlay">
-            <span class="visual-label">本地示范场景</span>
-            <strong>5 栋楼宇 · 1 个精细对象</strong>
-            <small>图片用于界面展示，不代表真实工程数据</small>
+        <el-tooltip content="管理园区项目" placement="right">
+          <el-button circle size="small" aria-label="管理园区项目" @click="openProjectManagement">
+            <Plus :size="15" />
+          </el-button>
+        </el-tooltip>
+      </div>
+
+      <el-input v-model="keyword" clearable placeholder="搜索项目或位置">
+        <template #prefix><Search :size="15" /></template>
+      </el-input>
+
+      <el-alert
+        v-if="loadError"
+        :title="loadError"
+        type="error"
+        :closable="false"
+        show-icon
+        class="overview-alert"
+      >
+        <template #default>
+          <el-button link type="primary" @click="loadProjects">重新加载</el-button>
+        </template>
+      </el-alert>
+
+      <div v-loading="loading" class="project-list">
+        <button
+          v-for="project in filteredProjects"
+          :key="project.id"
+          class="project-row"
+          :class="{ active: project.id === selectedProjectId }"
+          type="button"
+          @click="selectProject(project.id)"
+        >
+          <span class="project-row-icon">
+            <FolderKanban :size="16" />
+          </span>
+          <span class="project-row-copy">
+            <strong>{{ project.name }}</strong>
+            <small>{{ project.locationName }}</small>
+          </span>
+          <span class="project-row-state" :class="{ archived: project.status === 'ARCHIVED' }">
+            {{ project.status === 'ACTIVE' ? '进行中' : '已归档' }}
           </span>
         </button>
-      </article>
 
-      <aside class="task-panel">
-        <div class="section-heading">
-          <div>
-            <span class="eyebrow">近期任务</span>
-            <h3>待办与校准</h3>
-          </div>
-          <el-button text @click="showPendingMessage">全部</el-button>
+        <div v-if="!loading && !loadError && filteredProjects.length === 0" class="empty-projects">
+          <MapPin :size="26" />
+          <strong>{{ projects.length === 0 ? '还没有园区项目' : '没有匹配的项目' }}</strong>
+          <small>
+            {{ projects.length === 0 ? '创建项目后会显示在空间底座上' : '请尝试其他搜索关键词' }}
+          </small>
+          <el-button v-if="projects.length === 0" type="primary" @click="openProjectManagement">
+            创建园区项目
+          </el-button>
         </div>
-        <div class="task-list">
-          <div v-for="task in tasks" :key="task.name" class="task-row">
-            <span>{{ task.name }}</span>
-            <el-tag :type="task.type" effect="plain">{{ task.state }}</el-tag>
-          </div>
-        </div>
-        <div class="notice">
-          只有用户主动圈选或标注的建筑，才进入平台自有资源管理范围。
-        </div>
-      </aside>
-    </section>
-
-    <section class="project-section">
-      <div class="section-heading">
-        <div>
-          <span class="eyebrow">项目清单</span>
-          <h3>最近访问</h3>
-        </div>
-        <el-button @click="router.push('/projects')">管理项目</el-button>
       </div>
-      <el-table :data="projects">
-        <el-table-column prop="name" label="项目名称" min-width="180" />
-        <el-table-column prop="buildings" label="楼宇数" width="100" />
-        <el-table-column prop="detail" label="精细对象" width="110" />
-        <el-table-column label="状态" width="110">
-          <template #default="{ row }">
-            <el-tag :type="row.status === '已发布' ? 'success' : 'warning'" effect="plain">
-              {{ row.status }}
-            </el-tag>
-          </template>
-        </el-table-column>
-        <el-table-column prop="updatedAt" label="最近更新" min-width="120" />
-        <el-table-column label="操作" width="100" align="right">
-          <template #default>
-            <el-button link type="primary" @click="openMap">打开</el-button>
-          </template>
-        </el-table-column>
-      </el-table>
-    </section>
-  </div>
+    </aside>
+
+    <aside v-if="selectedProject" class="project-inspector">
+      <div class="inspector-heading">
+        <span class="inspector-icon"><Building2 :size="18" /></span>
+        <div>
+          <small>{{ selectedProject.projectCode }}</small>
+          <h2>{{ selectedProject.name }}</h2>
+        </div>
+      </div>
+      <p>{{ selectedProject.description || '该项目暂未填写说明。' }}</p>
+      <dl>
+        <div>
+          <dt>项目位置</dt>
+          <dd>{{ selectedProject.locationName }}</dd>
+        </div>
+        <div>
+          <dt>默认中心</dt>
+          <dd>
+            {{ formatCoordinate(selectedProject.startup.centerLng) }},
+            {{ formatCoordinate(selectedProject.startup.centerLat) }}
+          </dd>
+        </div>
+        <div>
+          <dt>地图视角</dt>
+          <dd>
+            {{ selectedProject.startup.mapMode }} · Z{{ selectedProject.startup.zoomLevel }}
+          </dd>
+        </div>
+        <div>
+          <dt>最近更新</dt>
+          <dd>{{ formatUtcTime(selectedProject.updatedAt) }}</dd>
+        </div>
+      </dl>
+      <el-button
+        type="primary"
+        :disabled="selectedProject.status === 'ARCHIVED'"
+        @click="openProject(selectedProject)"
+      >
+        打开标注工作台
+        <ChevronRight :size="16" />
+      </el-button>
+    </aside>
+
+    <footer class="overview-status">
+      <span><Crosshair :size="14" />项目坐标来自已保存的默认地图中心</span>
+      <span><FolderKanban :size="14" />{{ activeProjectCount }} 个进行中</span>
+      <span><Archive :size="14" />{{ archivedProjectCount }} 个已归档</span>
+      <span class="status-note">模拟背景不代表真实地理数据</span>
+    </footer>
+  </section>
 </template>
 
 <style scoped>
-.dashboard {
-  display: grid;
-  gap: 20px;
-}
-
-.page-heading,
-.section-heading {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 18px;
-}
-
-.page-heading h2,
-.section-heading h3 {
-  margin: 3px 0 0;
-}
-
-.page-heading h2 {
-  font-size: 25px;
-}
-
-.page-heading p {
-  margin: 5px 0 0;
-  color: var(--jw-muted);
-}
-
-.section-heading h3 {
-  font-size: 17px;
-}
-
-.eyebrow {
-  color: var(--jw-accent);
-  font-size: 11px;
-  font-weight: 800;
-}
-
-.metric-grid {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 14px;
-}
-
-.metric-card,
-.campus-panel,
-.task-panel,
-.project-section {
-  border: 1px solid var(--jw-border);
-  border-radius: var(--jw-radius);
-  background: var(--jw-surface);
-}
-
-.metric-card {
-  display: flex;
-  min-height: 138px;
-  align-items: flex-start;
-  justify-content: space-between;
-  padding: 20px;
-}
-
-.metric-copy {
-  display: grid;
-}
-
-.metric-copy > span,
-.metric-copy small {
-  color: var(--jw-muted);
-  font-size: 12px;
-}
-
-.metric-copy strong {
-  margin: 7px 0 2px;
-  font-size: 30px;
-  line-height: 1.1;
-}
-
-.metric-icon {
-  display: grid;
-  width: 42px;
-  height: 42px;
-  place-items: center;
-  border-radius: 7px;
-}
-
-.metric-icon.teal {
-  background: #e7f3f1;
-  color: #267d76;
-}
-
-.metric-icon.blue {
-  background: #e8f0f5;
-  color: #3f7391;
-}
-
-.metric-icon.amber {
-  background: #f7eee4;
-  color: #a6652f;
-}
-
-.metric-icon.red {
-  background: #f7eaea;
-  color: #a84949;
-}
-
-.overview-grid {
-  display: grid;
-  grid-template-columns: minmax(0, 1.65fr) minmax(290px, 0.85fr);
-  gap: 16px;
-}
-
-.campus-panel,
-.task-panel,
-.project-section {
-  padding: 18px;
-}
-
-.campus-visual {
+.spatial-overview {
   position: relative;
-  display: block;
-  width: 100%;
-  height: 330px;
-  margin-top: 14px;
+  min-width: 0;
+  min-height: calc(100vh - 76px);
+  margin: -24px -28px -36px;
   overflow: hidden;
-  border: 0;
-  border-radius: 6px;
-  background: #cbd9d9;
-  color: #fff;
-  text-align: left;
+  background: #dfe8e5;
 }
 
-.campus-visual img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  transition: transform 220ms ease;
-}
-
-.campus-visual:hover img {
-  transform: scale(1.015);
-}
-
-.visual-overlay {
+.overview-command,
+.project-browser,
+.project-inspector,
+.overview-status {
   position: absolute;
-  inset: auto 0 0;
-  display: grid;
-  gap: 3px;
-  padding: 58px 20px 18px;
-  background: linear-gradient(transparent, rgb(13 35 41 / 86%));
+  z-index: 4;
+  border: 1px solid rgb(113 143 138 / 35%);
+  background: rgb(250 252 251 / 94%);
+  box-shadow: 0 12px 30px rgb(32 67 64 / 13%);
+  backdrop-filter: blur(12px);
 }
 
-.visual-label {
-  width: fit-content;
-  padding: 3px 7px;
-  border: 1px solid rgb(255 255 255 / 35%);
-  border-radius: 4px;
-  font-size: 11px;
-}
-
-.visual-overlay strong {
-  font-size: 18px;
-}
-
-.visual-overlay small {
-  color: #cae0e2;
-}
-
-.task-list {
-  margin-top: 12px;
-}
-
-.task-row {
+.overview-command {
+  top: 18px;
+  right: 18px;
+  left: 18px;
   display: flex;
   min-height: 58px;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
-  border-bottom: 1px solid #edf1f2;
-  font-size: 13px;
+  gap: 16px;
+  padding: 8px 10px 8px 14px;
+  border-radius: 7px;
 }
 
-.notice {
-  margin-top: 18px;
-  padding: 12px;
-  border-left: 3px solid #c18246;
-  background: #faf5ef;
-  color: #72583f;
+.overview-title,
+.overview-command-actions,
+.browser-heading,
+.browser-heading > div,
+.inspector-heading,
+.overview-status,
+.overview-status span {
+  display: flex;
+  align-items: center;
+}
+
+.overview-title {
+  min-width: 0;
+  gap: 10px;
+}
+
+.overview-title > div {
+  display: grid;
+}
+
+.overview-title strong {
+  font-size: 15px;
+}
+
+.overview-title small {
+  color: var(--jw-muted);
+  font-size: 11px;
+}
+
+.overview-symbol,
+.inspector-icon,
+.project-row-icon {
+  display: grid;
+  flex: 0 0 auto;
+  place-items: center;
+  border-radius: 5px;
+  background: #e2f0ed;
+  color: #17645f;
+}
+
+.overview-symbol {
+  width: 34px;
+  height: 34px;
+}
+
+.overview-command-actions {
+  gap: 7px;
+}
+
+.provider-state {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin-right: 3px;
+  color: #506c72;
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.provider-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #b87335;
+  box-shadow: 0 0 0 3px rgb(184 115 53 / 14%);
+}
+
+.project-browser {
+  top: 92px;
+  bottom: 50px;
+  left: 18px;
+  display: grid;
+  width: 286px;
+  min-height: 0;
+  padding: 14px;
+  border-radius: 7px;
+  grid-template-rows: auto auto minmax(0, 1fr);
+}
+
+.browser-heading {
+  min-height: 34px;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+
+.browser-heading > div {
+  gap: 8px;
+}
+
+.browser-heading span {
+  color: #466069;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.browser-heading strong {
+  color: var(--jw-accent);
+  font-size: 18px;
+}
+
+.overview-alert {
+  margin-top: 10px;
+}
+
+.project-list {
+  min-height: 0;
+  margin: 12px -5px 0;
+  overflow-y: auto;
+  padding: 0 5px 8px;
+  scrollbar-width: thin;
+  scrollbar-color: #aac3bf transparent;
+}
+
+.project-row {
+  display: grid;
+  width: 100%;
+  min-height: 64px;
+  align-items: center;
+  gap: 9px;
+  padding: 9px;
+  border: 0;
+  border-bottom: 1px solid #e5eceb;
+  background: transparent;
+  color: var(--jw-text);
+  grid-template-columns: 32px minmax(0, 1fr) auto;
+  text-align: left;
+}
+
+.project-row:hover {
+  background: #f0f6f4;
+}
+
+.project-row.active {
+  background: #e5f1ee;
+  box-shadow: inset 3px 0 #267d76;
+}
+
+.project-row-icon {
+  width: 32px;
+  height: 32px;
+}
+
+.project-row-copy {
+  display: grid;
+  min-width: 0;
+}
+
+.project-row-copy strong,
+.project-row-copy small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.project-row-copy strong {
   font-size: 12px;
 }
 
-.project-section .el-table {
-  margin-top: 12px;
+.project-row-copy small {
+  color: var(--jw-muted);
+  font-size: 10px;
 }
 
-@media (max-width: 1180px) {
-  .metric-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+.project-row-state {
+  color: #267d76;
+  font-size: 10px;
+  white-space: nowrap;
+}
+
+.project-row-state.archived {
+  color: #7d898d;
+}
+
+.empty-projects {
+  display: grid;
+  min-height: 250px;
+  place-items: center;
+  align-content: center;
+  gap: 8px;
+  padding: 20px;
+  color: var(--jw-muted);
+  text-align: center;
+}
+
+.empty-projects strong {
+  color: #415b64;
+  font-size: 13px;
+}
+
+.empty-projects small {
+  font-size: 11px;
+}
+
+.empty-projects .el-button {
+  margin-top: 6px;
+}
+
+.project-inspector {
+  right: 18px;
+  bottom: 50px;
+  width: 320px;
+  padding: 16px;
+  border-radius: 7px;
+}
+
+.inspector-heading {
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.inspector-icon {
+  width: 36px;
+  height: 36px;
+}
+
+.inspector-heading > div {
+  min-width: 0;
+}
+
+.inspector-heading small {
+  color: var(--jw-accent);
+  font-family: Consolas, monospace;
+  font-size: 10px;
+}
+
+.inspector-heading h2 {
+  margin: 1px 0 0;
+  font-size: 17px;
+}
+
+.project-inspector > p {
+  display: -webkit-box;
+  margin: 13px 0;
+  overflow: hidden;
+  color: #5f747b;
+  font-size: 11px;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.project-inspector dl {
+  display: grid;
+  gap: 8px;
+  margin: 0 0 14px;
+}
+
+.project-inspector dl div {
+  display: grid;
+  grid-template-columns: 70px minmax(0, 1fr);
+  gap: 8px;
+  font-size: 11px;
+}
+
+.project-inspector dt {
+  color: var(--jw-muted);
+}
+
+.project-inspector dd {
+  min-width: 0;
+  margin: 0;
+  overflow: hidden;
+  color: #2c4b55;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.project-inspector .el-button {
+  width: 100%;
+}
+
+.overview-status {
+  right: 18px;
+  bottom: 12px;
+  left: 18px;
+  min-height: 30px;
+  gap: 18px;
+  padding: 5px 10px;
+  border-radius: 5px;
+  color: #506b71;
+  font-size: 10px;
+}
+
+.overview-status span {
+  gap: 5px;
+  white-space: nowrap;
+}
+
+.overview-status .status-note {
+  margin-left: auto;
+  color: #8a623d;
+}
+
+@media (max-width: 1100px) {
+  .project-inspector {
+    width: 290px;
   }
 }
 
-@media (max-width: 800px) {
-  .overview-grid {
-    grid-template-columns: 1fr;
+@media (max-width: 820px) {
+  .spatial-overview {
+    display: grid;
+    min-height: auto;
+    margin: -16px -14px -28px;
+    overflow: visible;
+    background: #dfe8e5;
+    grid-template-rows: 520px auto auto auto;
   }
 
-  .campus-visual {
-    height: 280px;
+  .overview-command {
+    right: 12px;
+    left: 12px;
+  }
+
+  .project-browser,
+  .project-inspector,
+  .overview-status {
+    position: static;
+    width: auto;
+    margin: 0;
+    border-right: 0;
+    border-bottom: 0;
+    border-left: 0;
+    border-radius: 0;
+    box-shadow: none;
+  }
+
+  .project-browser {
+    min-height: 360px;
+    grid-row: 2;
+  }
+
+  .project-list {
+    max-height: 330px;
+  }
+
+  .project-inspector {
+    grid-row: 3;
+  }
+
+  .overview-status {
+    grid-row: 4;
+    flex-wrap: wrap;
+    gap: 7px 14px;
+    padding: 10px 14px;
+  }
+
+  .overview-status .status-note {
+    width: 100%;
+    margin-left: 0;
   }
 }
 
-@media (max-width: 580px) {
-  .page-heading {
+@media (max-width: 560px) {
+  .overview-command {
     align-items: flex-start;
-    flex-direction: column;
   }
 
-  .metric-grid {
-    grid-template-columns: 1fr;
-  }
-
-  .campus-visual {
-    height: 240px;
+  .overview-title small,
+  .provider-state {
+    display: none;
   }
 }
 </style>

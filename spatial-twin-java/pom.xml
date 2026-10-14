@@ -20,6 +20,7 @@
     <modules>
         <module>spatial-twin-common</module>
         <module>spatial-twin-module-system</module>
+        <module>spatial-twin-module-project</module>
         <module>spatial-twin-server</module>
     </modules>
 
@@ -42,6 +43,11 @@
             <dependency>
                 <groupId>com.jingwei</groupId>
                 <artifactId>spatial-twin-module-system</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.jingwei</groupId>
+                <artifactId>spatial-twin-module-project</artifactId>
                 <version>${project.version}</version>
             </dependency>
             <dependency>

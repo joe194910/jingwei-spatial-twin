@@ -8,6 +8,7 @@ import DashboardView from '@/views/DashboardView.vue'
 import LoginView from '@/views/LoginView.vue'
 import ModuleView from '@/views/ModuleView.vue'
 import NotFoundView from '@/views/NotFoundView.vue'
+import ProjectManagementView from '@/views/project/ProjectManagementView.vue'
 import SpatialWorkspaceView from '@/views/SpatialWorkspaceView.vue'
 import MenuManagementView from '@/views/system/MenuManagementView.vue'
 import RoleManagementView from '@/views/system/RoleManagementView.vue'
@@ -25,7 +26,7 @@ const routes: RouteRecordRaw[] = [
         name: 'dashboard',
         component: DashboardView,
         meta: {
-          title: '工作台总览',
+          title: '经纬空间总览',
           moduleKey: 'dashboard',
           permission: 'workspace:dashboard:view',
         },
@@ -33,7 +34,7 @@ const routes: RouteRecordRaw[] = [
       {
         path: 'projects',
         name: 'projects',
-        component: ModuleView,
+        component: ProjectManagementView,
         meta: {
           title: '园区项目',
           moduleKey: 'projects',

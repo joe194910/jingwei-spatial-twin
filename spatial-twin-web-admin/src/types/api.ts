@@ -9,6 +9,16 @@ export interface ApiResponse<T> {
   timestamp: string
 }
 
+/**
+ * 后端统一分页数据，页码从1开始。
+ */
+export interface PageResult<T> {
+  pageNo: number
+  pageSize: number
+  total: number
+  records: T[]
+}
+
 export class ApiError extends Error {
   readonly code: number
   readonly requestId: string | null

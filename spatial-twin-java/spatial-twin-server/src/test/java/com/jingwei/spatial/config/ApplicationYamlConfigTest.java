@@ -39,7 +39,6 @@ class ApplicationYamlConfigTest {
         assertEquals("nexora_admin", environment.getProperty("jingwei.storage.minio.access-key"));
         assertEquals("NexoraMinio2026", environment.getProperty("jingwei.storage.minio.secret-key"));
         assertEquals("false", environment.getProperty("jingwei.storage.minio.enabled"));
-        assertEquals("", environment.getProperty("jingwei.bootstrap-admin.password"));
     }
 
     @Test

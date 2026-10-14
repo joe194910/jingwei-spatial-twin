@@ -15,12 +15,14 @@ public class AuditLogEntity {
     @TableId(type = IdType.ASSIGN_ID)
     private Long id;
     private Long userId;
+    private Long projectId;
     private String objectType;
     private String objectId;
     private String action;
     private String result;
     private String requestId;
     private String ip;
+    private String userAgent;
     private LocalDateTime occurredAt;
     private String detailsMasked;
 
@@ -38,6 +40,14 @@ public class AuditLogEntity {
 
     public void setUserId(Long userId) {
         this.userId = userId;
+    }
+
+    public Long getProjectId() {
+        return projectId;
+    }
+
+    public void setProjectId(Long projectId) {
+        this.projectId = projectId;
     }
 
     public String getObjectType() {
@@ -86,6 +96,14 @@ public class AuditLogEntity {
 
     public void setIp(String ip) {
         this.ip = ip;
+    }
+
+    public String getUserAgent() {
+        return userAgent;
+    }
+
+    public void setUserAgent(String userAgent) {
+        this.userAgent = userAgent;
     }
 
     public LocalDateTime getOccurredAt() {

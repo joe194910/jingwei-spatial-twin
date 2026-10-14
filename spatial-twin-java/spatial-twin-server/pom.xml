@@ -21,6 +21,10 @@
             <artifactId>spatial-twin-module-system</artifactId>
         </dependency>
         <dependency>
+            <groupId>com.jingwei</groupId>
+            <artifactId>spatial-twin-module-project</artifactId>
+        </dependency>
+        <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-web</artifactId>
         </dependency>
