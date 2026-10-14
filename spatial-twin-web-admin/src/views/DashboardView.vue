@@ -10,20 +10,23 @@ import {
   LocateFixed,
   Map,
   MapPin,
+  PanelLeftOpen,
   Plus,
   RefreshCw,
   Search,
+  X,
 } from '@lucide/vue'
 
 import { listProjects } from '@/api/project'
 import JingweiOverviewMap from '@/components/map/JingweiOverviewMap.vue'
-import type { OverviewProjectMarker } from '@/map/types'
+import type { MapProviderState, OverviewProjectMarker } from '@/map/types'
 import { ApiError } from '@/types/api'
 import type { ProjectItem } from '@/types/project'
 
 interface OverviewMapExpose {
   fitProjects: () => void
   focusProject: (projectId: string) => void
+  retry: () => Promise<void>
 }
 
 // 首页只消费用户有权访问的项目轻量信息，具体地图渲染由适配器负责。
@@ -33,7 +36,14 @@ const loadError = ref('')
 const keyword = ref('')
 const projects = ref<ProjectItem[]>([])
 const selectedProjectId = ref<string | null>(null)
+const projectBrowserOpen = ref(false)
 const overviewMap = ref<OverviewMapExpose>()
+const mapProviderState = ref<MapProviderState>({
+  mode: 'OFFLINE',
+  label: '经纬离线底座',
+  degraded: true,
+  reason: '正在初始化地图底座',
+})
 
 const filteredProjects = computed(() => {
   const normalizedKeyword = keyword.value.trim().toLocaleLowerCase('zh-CN')
@@ -57,6 +67,12 @@ const projectMarkers = computed<OverviewProjectMarker[]>(() =>
       lng: Number(project.startup.centerLng),
       lat: Number(project.startup.centerLat),
     },
+    viewpoint: {
+      mapMode: project.startup.mapMode,
+      zoom: Number(project.startup.zoomLevel),
+      pitch: Number(project.startup.pitch),
+      rotation: Number(project.startup.rotation),
+    },
   })),
 )
 
@@ -77,7 +93,7 @@ watch(filteredProjects, (visibleProjects) => {
     (project) => project.id === selectedProjectId.value,
   )
   if (!selectedProjectVisible) {
-    selectedProjectId.value = visibleProjects[0]?.id ?? null
+    selectedProjectId.value = null
   }
 })
 
@@ -110,10 +126,7 @@ async function loadProjects() {
       (project) => project.id === selectedProjectId.value,
     )
     if (!selectedStillExists) {
-      selectedProjectId.value =
-        projects.value.find((project) => project.status === 'ACTIVE')?.id ??
-        projects.value[0]?.id ??
-        null
+      selectedProjectId.value = null
     }
   } catch (error) {
     loadError.value = errorMessage(error, '空间总览加载失败')
@@ -124,11 +137,25 @@ async function loadProjects() {
 
 function selectProject(projectId: string) {
   selectedProjectId.value = projectId
+  projectBrowserOpen.value = false
   overviewMap.value?.focusProject(projectId)
 }
 
+function clearSelectedProject() {
+  selectedProjectId.value = null
+}
+
 function resetViewport() {
+  clearSelectedProject()
   overviewMap.value?.fitProjects()
+}
+
+function updateMapProviderState(state: MapProviderState) {
+  mapProviderState.value = state
+}
+
+async function refreshOverview() {
+  await Promise.all([loadProjects(), overviewMap.value?.retry()])
 }
 
 function openProject(project: ProjectItem) {
@@ -152,6 +179,7 @@ onMounted(loadProjects)
       :projects="projectMarkers"
       :selected-project-id="selectedProjectId"
       @select="selectProject"
+      @provider-state="updateMapProviderState"
     />
 
     <header class="overview-command">
@@ -163,34 +191,54 @@ onMounted(loadProjects)
         </div>
       </div>
       <div class="overview-command-actions">
-        <span class="provider-state">
-          <span class="provider-dot" />
-          经纬模拟底座
-        </span>
+        <el-tooltip
+          :content="mapProviderState.reason || '在线地图运行正常'"
+          placement="bottom"
+        >
+          <span class="provider-state">
+            <span class="provider-dot" :class="{ online: !mapProviderState.degraded }" />
+            {{ mapProviderState.label }}
+          </span>
+        </el-tooltip>
         <el-tooltip content="重置项目视野" placement="bottom">
           <el-button circle aria-label="重置项目视野" @click="resetViewport">
             <LocateFixed :size="17" />
           </el-button>
         </el-tooltip>
-        <el-tooltip content="刷新项目" placement="bottom">
-          <el-button circle :loading="loading" aria-label="刷新项目" @click="loadProjects">
+        <el-tooltip content="刷新空间总览" placement="bottom">
+          <el-button circle :loading="loading" aria-label="刷新空间总览" @click="refreshOverview">
             <RefreshCw v-if="!loading" :size="17" />
           </el-button>
         </el-tooltip>
       </div>
     </header>
 
-    <aside class="project-browser">
+    <el-tooltip v-if="!projectBrowserOpen" content="打开项目列表" placement="right">
+      <el-badge :value="projects.length" class="project-browser-trigger">
+        <el-button circle aria-label="打开项目列表" @click="projectBrowserOpen = true">
+          <PanelLeftOpen :size="18" />
+        </el-button>
+      </el-badge>
+    </el-tooltip>
+
+    <aside v-if="projectBrowserOpen" class="project-browser">
       <div class="browser-heading">
         <div>
           <span>空间项目</span>
           <strong>{{ projects.length }}</strong>
         </div>
-        <el-tooltip content="管理园区项目" placement="right">
-          <el-button circle size="small" aria-label="管理园区项目" @click="openProjectManagement">
-            <Plus :size="15" />
-          </el-button>
-        </el-tooltip>
+        <div class="browser-actions">
+          <el-tooltip content="管理园区项目" placement="top">
+            <el-button circle size="small" aria-label="管理园区项目" @click="openProjectManagement">
+              <Plus :size="15" />
+            </el-button>
+          </el-tooltip>
+          <el-tooltip content="收起项目列表" placement="top">
+            <el-button circle size="small" aria-label="收起项目列表" @click="projectBrowserOpen = false">
+              <X :size="15" />
+            </el-button>
+          </el-tooltip>
+        </div>
       </div>
 
       <el-input v-model="keyword" clearable placeholder="搜索项目或位置">
@@ -246,11 +294,18 @@ onMounted(loadProjects)
 
     <aside v-if="selectedProject" class="project-inspector">
       <div class="inspector-heading">
-        <span class="inspector-icon"><Building2 :size="18" /></span>
-        <div>
-          <small>{{ selectedProject.projectCode }}</small>
-          <h2>{{ selectedProject.name }}</h2>
+        <div class="inspector-identity">
+          <span class="inspector-icon"><Building2 :size="18" /></span>
+          <div>
+            <small>{{ selectedProject.projectCode }}</small>
+            <h2>{{ selectedProject.name }}</h2>
+          </div>
         </div>
+        <el-tooltip content="关闭项目详情" placement="left">
+          <el-button circle size="small" aria-label="关闭项目详情" @click="clearSelectedProject">
+            <X :size="15" />
+          </el-button>
+        </el-tooltip>
       </div>
       <p>{{ selectedProject.description || '该项目暂未填写说明。' }}</p>
       <dl>
@@ -290,7 +345,13 @@ onMounted(loadProjects)
       <span><Crosshair :size="14" />项目坐标来自已保存的默认地图中心</span>
       <span><FolderKanban :size="14" />{{ activeProjectCount }} 个进行中</span>
       <span><Archive :size="14" />{{ archivedProjectCount }} 个已归档</span>
-      <span class="status-note">模拟背景不代表真实地理数据</span>
+      <span class="status-note">
+        {{
+          mapProviderState.degraded
+            ? mapProviderState.reason || '在线地图不可用，当前使用经纬离线底座'
+            : '在线底图由高德提供，空间业务数据由经纬空间管理'
+        }}
+      </span>
     </footer>
   </section>
 </template>
@@ -306,6 +367,7 @@ onMounted(loadProjects)
 }
 
 .overview-command,
+.project-browser-trigger,
 .project-browser,
 .project-inspector,
 .overview-status {
@@ -319,9 +381,9 @@ onMounted(loadProjects)
 
 .overview-command {
   top: 18px;
-  right: 18px;
   left: 18px;
   display: flex;
+  width: min(650px, calc(100% - 220px));
   min-height: 58px;
   align-items: center;
   justify-content: space-between;
@@ -397,6 +459,11 @@ onMounted(loadProjects)
   box-shadow: 0 0 0 3px rgb(184 115 53 / 14%);
 }
 
+.provider-dot.online {
+  background: #2f8d68;
+  box-shadow: 0 0 0 3px rgb(47 141 104 / 14%);
+}
+
 .project-browser {
   top: 92px;
   bottom: 50px;
@@ -409,10 +476,34 @@ onMounted(loadProjects)
   grid-template-rows: auto auto minmax(0, 1fr);
 }
 
+.project-browser-trigger {
+  top: 92px;
+  left: 18px;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+  backdrop-filter: none;
+}
+
+.project-browser-trigger :deep(.el-badge__content) {
+  border: 2px solid #f8fbfa;
+  background: #267d76;
+}
+
 .browser-heading {
   min-height: 34px;
   justify-content: space-between;
   margin-bottom: 10px;
+}
+
+.browser-actions,
+.inspector-identity {
+  display: flex;
+  align-items: center;
+}
+
+.browser-actions {
+  gap: 6px;
 }
 
 .browser-heading > div {
@@ -536,6 +627,13 @@ onMounted(loadProjects)
 }
 
 .inspector-heading {
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.inspector-identity {
+  min-width: 0;
   align-items: flex-start;
   gap: 10px;
 }
@@ -545,7 +643,7 @@ onMounted(loadProjects)
   height: 36px;
 }
 
-.inspector-heading > div {
+.inspector-identity > div {
   min-width: 0;
 }
 
@@ -601,15 +699,18 @@ onMounted(loadProjects)
 }
 
 .overview-status {
-  right: 18px;
+  right: auto;
   bottom: 12px;
-  left: 18px;
+  left: 50%;
+  width: max-content;
+  max-width: calc(100% - 360px);
   min-height: 30px;
   gap: 18px;
   padding: 5px 10px;
   border-radius: 5px;
   color: #506b71;
   font-size: 10px;
+  transform: translateX(-50%);
 }
 
 .overview-status span {
@@ -618,11 +719,18 @@ onMounted(loadProjects)
 }
 
 .overview-status .status-note {
-  margin-left: auto;
   color: #8a623d;
 }
 
 @media (max-width: 1100px) {
+  .overview-command {
+    width: min(570px, calc(100% - 190px));
+  }
+
+  .overview-status {
+    max-width: calc(100% - 160px);
+  }
+
   .project-inspector {
     width: 290px;
   }
@@ -640,6 +748,12 @@ onMounted(loadProjects)
 
   .overview-command {
     right: 12px;
+    left: 12px;
+    width: auto;
+  }
+
+  .project-browser-trigger {
+    top: 92px;
     left: 12px;
   }
 
@@ -674,6 +788,8 @@ onMounted(loadProjects)
     flex-wrap: wrap;
     gap: 7px 14px;
     padding: 10px 14px;
+    max-width: none;
+    transform: none;
   }
 
   .overview-status .status-note {

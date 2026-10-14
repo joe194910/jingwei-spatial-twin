@@ -11,11 +11,11 @@ interface ProjectScreenPoint {
 }
 
 /**
- * 无地图密钥时使用的经纬模拟底座。
+ * 高德不可用或设备离线时使用的经纬本地底座。
  *
- * 该实现只用于验证地图适配边界、项目空间分布和交互流程，背景道路与地貌不代表真实地理数据。
+ * 该实现不请求外网，不缓存第三方地图瓦片。背景仅表达空间关系，不代表真实道路和地貌。
  */
-export class JingweiMockMapAdapter implements MapAdapter {
+export class JingweiOfflineMapAdapter implements MapAdapter {
   private container: HTMLElement | null = null
   private root: HTMLDivElement | null = null
   private canvas: HTMLCanvasElement | null = null
@@ -49,6 +49,7 @@ export class JingweiMockMapAdapter implements MapAdapter {
     this.resizeObserver = new ResizeObserver(() => this.resize())
     this.resizeObserver.observe(container)
     this.resize()
+    return Promise.resolve()
   }
 
   setProjects(projects: OverviewProjectMarker[]) {

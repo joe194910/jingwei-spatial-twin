@@ -54,6 +54,9 @@ sa-token:
 
 # 经纬空间平台自定义配置。
 jingwei:
+  # 地图供应商凭证加密：主密钥只能通过环境变量注入，禁止写入数据库或源码。
+  map-config:
+    encryption-key: ${JW_MAP_CONFIG_ENCRYPTION_KEY}
   # 首个管理员初始化：仅在显式开启时执行，密码必须由环境变量注入且不得写入 YAML。
   bootstrap-admin:
     enabled: ${JW_BOOTSTRAP_ADMIN_ENABLED:true}
